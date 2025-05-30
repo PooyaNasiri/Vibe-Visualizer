@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Vibe Visualizer</title>
+
+    <!-- Load core p5 and sound libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/addons/p5.sound.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: black;
+        }
+    </style>
+</head>
+
+<body>
+    <script>
+        // === CONFIGURABLE PARAMETERS ===
+        const NUM_SHAPES = 10;
+
+        const LOBE_MIN = 1;
+        const LOBE_MAX = 5;
+
+        const RADIUS_MIN = 200;
+        const RADIUS_MAX = 300;
+
+        const WAVE_MIN = 0.001;
+        const WAVE_MAX = 50	;
+
+        const ROTATE_MIN = 0.001;
+        const ROTATE_MAX = 1.0
+
+        const HUE_MIN = 0;
+        const HUE_MAX = 360;
+
+        const LERP_SPEED = 0.0001;
+        const SENSETIVITY = 1000;
+
+        const BOMB_THRESHOLD = 0.05;
+        const BOMB_COOLDOWN = 10;
+        // === END CONFIG ===
+
+        let mic, fft;
+        let shapes = [];
+        let bombs = [];
+        let lastBombTime = 0;
+        let smoothedVolume = 0;
+        let displayedVolume = 0;
+        let lastVolumeUpdate = 0;
+        const VOLUME_UPDATE_INTERVAL = 100;
+		let started = false;
+
+        function setup() {
+            createCanvas(windowWidth, windowHeight);
+            noFill();
+            angleMode(DEGREES);
+            colorMode(HSB, 360, 100, 100, 100);
+
+            mic = new p5.AudioIn();
+            mic.start();
+
+            fft = new p5.FFT();
+            fft.setInput(mic);
+
+            for (let i = 0; i < NUM_SHAPES; i++) {
+                shapes.push(makeShape());
+            }
+        }
+
+        function draw() {
+            if (!started) {
+                fill(255);
+				textSize(30);
+                text("Click anywhere to start", width / 2 - 100, height / 2);
+                return;
+            }
+            background(0, 0, 0, 10);
+            let level = mic.getLevel();// === Display volume level on screen ===
+            let targetVolume = constrain(level * 1000, 0, 100); // scale up
+            let currentVolume = Math.round(constrain(level * 1000, 0, 100));
+
+            if (millis() - lastVolumeUpdate > VOLUME_UPDATE_INTERVAL) {
+                displayedVolume = currentVolume;
+                lastVolumeUpdate = millis();
+            }
+
+            // Draw solid background box
+            resetMatrix();
+            noStroke();
+            fill(0, 255);
+            rect(15, 15, 140, 35);
+
+            // Draw the volume text
+            textAlign(LEFT, TOP);
+            textSize(20);
+            fill(255);
+            text("Volume: " + displayedVolume, 20, 20);
+
+            noFill();
+            // === Bomb trigger on volume spike ===
+            if (level > BOMB_THRESHOLD && millis() - lastBombTime > BOMB_COOLDOWN) {
+                spawnBomb(level);
+                lastBombTime = millis();
+            }
+
+            // === Draw bombs ===
+            for (let i = bombs.length - 1; i >= 0; i--) {
+                let b = bombs[i];
+                b.alpha -= 1.0;
+                b.radius += b.growth;
+                if (b.alpha <= 0) {
+                    bombs.splice(i, 1);
+                } else {
+                    noStroke();
+                    fill(b.hue, 100, 100, b.alpha);
+                    ellipse(b.x, b.y, b.radius);
+                }
+            }
+
+            // === Draw shapes ===
+            translate(width / 2, height / 2);
+            shapes.forEach((s, i) => {
+                updateShape(s);
+                s.lobeCount = lerp(s.lobeCount, s.target.lobeCount, LERP_SPEED);
+                s.baseRadius = lerp(s.baseRadius, s.target.baseRadius, LERP_SPEED);
+                s.waveStrength = lerp(s.waveStrength, s.target.waveStrength, LERP_SPEED);
+                s.rotateSpeed = lerp(s.rotateSpeed, s.target.rotateSpeed, LERP_SPEED);
+                s.hueOffset = lerp(s.hueOffset, s.target.hueOffset, LERP_SPEED);
+
+                push();
+                rotate(frameCount * s.rotateSpeed + i * 40);
+                let hue = (frameCount + s.hueOffset) % 360;
+                strokeWeight(1.5);
+                stroke(hue, 80, 100, 70);
+
+                beginShape();
+                for (let angle = 0; angle < 360; angle += 10) {
+                    let wave = sin(angle * s.lobeCount + frameCount) * s.waveStrength;
+                    let r = s.baseRadius + wave + level * SENSETIVITY + random(-3, 3);
+                    let x = r * cos(angle);
+                    let y = r * sin(angle);
+                    curveVertex(x, y);
+                }
+                endShape(CLOSE);
+                pop();
+            });
+        }
+
+        function spawnBomb(level) {
+            bombs.push({
+                x: random(width),
+                y: random(height),
+                radius: random(30, 100) + level * 1000,
+                growth: random(0.5, 2),
+                hue: random(360),
+                alpha: 20
+            });
+        }
+
+        function makeShape() {
+            return {
+                lobeCount: random(LOBE_MIN, LOBE_MAX),
+                baseRadius: random(RADIUS_MIN, RADIUS_MAX),
+                waveStrength: random(WAVE_MIN, WAVE_MAX),
+                rotateSpeed: random(ROTATE_MIN, ROTATE_MAX),
+                hueOffset: random(HUE_MIN, HUE_MAX),
+                target: {
+                    lobeCount: random(LOBE_MIN, LOBE_MAX),
+                    baseRadius: random(RADIUS_MIN, RADIUS_MAX),
+                    waveStrength: random(WAVE_MIN, WAVE_MAX),
+                    rotateSpeed: random(ROTATE_MIN, ROTATE_MAX),
+                    hueOffset: random(HUE_MIN, HUE_MAX),
+                },
+                timers: {
+                    lobeCount: millis() + random(500, 2000),
+                    baseRadius: millis() + random(500, 2000),
+                    waveStrength: millis() + random(500, 2000),
+                    rotateSpeed: millis() + random(500, 2000),
+                    hueOffset: millis() + random(500, 2000),
+                }
+            };
+        }
+
+        function updateShape(s) {
+            let now = millis();
+            for (let key in s.timers) {
+                if (now > s.timers[key]) {
+                    s.target[key] = getRandomValueForKey(key);
+                    s.timers[key] = now + random(500, 3000);
+                }
+            }
+        }
+
+        function getRandomValueForKey(key) {
+            switch (key) {
+                case 'lobeCount': return random(LOBE_MIN, LOBE_MAX);
+                case 'baseRadius': return random(RADIUS_MIN, RADIUS_MAX);
+                case 'waveStrength': return random(WAVE_MIN, WAVE_MAX);
+                case 'rotateSpeed': return random(ROTATE_MIN, ROTATE_MAX);
+                case 'hueOffset': return random(HUE_MIN, HUE_MAX);
+                default: return 0;
+            }
+        }
+
+        function mousePressed() {
+            if (!started) {
+                userStartAudio().then(() => {
+                    mic.start();
+                    started = true;
+                });
+            }
+        }
+    </script>
+</body>
+
+</html>
