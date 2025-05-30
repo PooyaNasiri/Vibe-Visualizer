@@ -5,7 +5,7 @@
 > A real-time, microphone-powered, trippy shape visualizer built with p5.js.  
 > Turn sound into psychedelic, dynamic, ever-morphing shapes and explosions.
 
-🔗 **Live Demo:** [https://pooyanasiri.github.io/vibe-visualizer/](https://pooyanasiri.github.io/vibe-visualizer/)
+🔗 **Live Demo:** [https://pooyanasiri.github.io/vibe-visualizer/](https://pooyanasiri.github.io/Vibe-Visualizer/)
 
 
 ## 🚀 Features
